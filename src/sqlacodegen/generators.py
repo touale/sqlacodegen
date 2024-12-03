@@ -448,7 +448,11 @@ class TablesGenerator(CodeGenerator):
             kwargs["key"] = column.key
         if is_primary:
             kwargs["primary_key"] = True
-        if not column.nullable and not is_sole_pk and is_table:
+        if (
+            not column.nullable
+            and not is_sole_pk
+            and (is_table or isinstance(self, SQLModelGenerator))
+        ):
             kwargs["nullable"] = False
 
         if is_unique:
@@ -482,7 +486,7 @@ class TablesGenerator(CodeGenerator):
         if comment:
             kwargs["comment"] = repr(comment)
 
-        if is_table:
+        if is_table or isinstance(self, SQLModelGenerator):
             self.add_import(Column)
             return render_callable("Column", *args, kwargs=kwargs)
         else:
@@ -1369,6 +1373,8 @@ class SQLModelGenerator(DeclarativeGenerator):
         super(DeclarativeGenerator, self).collect_imports(models)
         if any(isinstance(model, ModelClass) for model in models):
             self.remove_literal_import("sqlalchemy", "MetaData")
+            self.remove_literal_import("sqlalchemy", "CHAR")
+
             self.add_literal_import("sqlmodel", "SQLModel")
             self.add_literal_import("sqlmodel", "Field")
 
