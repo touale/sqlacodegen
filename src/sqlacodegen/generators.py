@@ -106,6 +106,11 @@ class CodeGenerator(metaclass=ABCMeta):
         if invalid_options:
             raise ValueError("Unrecognized options: " + ", ".join(invalid_options))
 
+    @property
+    @abstractmethod
+    def views_supported(self) -> bool:
+        pass
+
     @abstractmethod
     def generate(self) -> str:
         """
@@ -133,6 +138,10 @@ class TablesGenerator(CodeGenerator):
         self.indentation: str = indentation
         self.imports: dict[str, set[str]] = defaultdict(set)
         self.module_imports: set[str] = set()
+
+    @property
+    def views_supported(self) -> bool:
+        return True
 
     def generate_base(self) -> None:
         self.base = Base(
@@ -461,11 +470,7 @@ class TablesGenerator(CodeGenerator):
             kwargs["key"] = column.key
         if is_primary:
             kwargs["primary_key"] = True
-        if (
-            not column.nullable
-            and not is_sole_pk
-            and (is_table or isinstance(self, SQLModelGenerator))
-        ):
+        if not column.nullable and not is_sole_pk and is_table:
             kwargs["nullable"] = False
 
         if is_unique:
@@ -499,11 +504,13 @@ class TablesGenerator(CodeGenerator):
         if comment:
             kwargs["comment"] = repr(comment)
 
-        if is_table or isinstance(self, SQLModelGenerator):
+        return self.render_column_callable(is_table, *args, **kwargs)
+
+    def render_column_callable(self, is_table: bool, *args: Any, **kwargs: Any) -> str:
+        if is_table:
             self.add_import(Column)
             return render_callable("Column", *args, kwargs=kwargs)
         else:
-            self.add_literal_import("sqlalchemy.orm", "mapped_column")
             return render_callable("mapped_column", *args, kwargs=kwargs)
 
     def render_column_type(self, coltype: object) -> str:
@@ -1348,10 +1355,7 @@ class DataclassGenerator(DeclarativeGenerator):
                 LiteralImport("sqlalchemy.orm", "MappedAsDataclass"),
             ],
             declarations=[
-                (
-                    f"class {self.base_class_name}(MappedAsDataclass, "
-                    "DeclarativeBase):"
-                ),
+                (f"class {self.base_class_name}(MappedAsDataclass, DeclarativeBase):"),
                 f"{self.indentation}pass",
             ],
             metadata_ref=f"{self.base_class_name}.metadata",
@@ -1375,6 +1379,14 @@ class SQLModelGenerator(DeclarativeGenerator):
             indentation=indentation,
             base_class_name=base_class_name,
         )
+
+    @property
+    def views_supported(self) -> bool:
+        return False
+
+    def render_column_callable(self, is_table: bool, *args: Any, **kwargs: Any) -> str:
+        self.add_import(Column)
+        return render_callable("Column", *args, kwargs=kwargs)
 
     def generate_base(self) -> None:
         self.base = Base(
