@@ -121,7 +121,12 @@ class CodeGenerator(metaclass=ABCMeta):
 
 @dataclass(eq=False)
 class TablesGenerator(CodeGenerator):
-    valid_options: ClassVar[set[str]] = {"noindexes", "noconstraints", "nocomments"}
+    valid_options: ClassVar[set[str]] = {
+        "noindexes",
+        "noconstraints",
+        "nocomments",
+        "disable_opt_import",
+    }
     builtin_module_names: ClassVar[set[str]] = set(sys.builtin_module_names) | {
         "dataclasses"
     }
@@ -615,7 +620,7 @@ class TablesGenerator(CodeGenerator):
         assert name, "Identifier cannot be empty"
         name = _re_invalid_identifier.sub("_", name)
         if name[0].isdigit():
-            name = "_" + name
+            name = "a_" + name
         elif iskeyword(name) or name == "metadata":
             name += "_"
 
@@ -665,10 +670,11 @@ class TablesGenerator(CodeGenerator):
                             continue
 
         for column in table.c:
-            try:
-                column.type = self.get_adapted_type(column.type)
-            except CompileError:
-                pass
+            if "disable_opt_import" not in self.options:
+                try:
+                    column.type = self.get_adapted_type(column.type)
+                except CompileError:
+                    pass
 
             # PostgreSQL specific fix: detect sequences from server_default
             if column.server_default and self.bind.dialect.name == "postgresql":
